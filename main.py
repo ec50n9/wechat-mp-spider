@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""微信公众号数据采集命令行工具。"""
+"""微信公众号数据采集命令行工具（基于 Typer）。"""
 
-import argparse
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Optional
+
+import typer
 
 from wechat_mp_spider.analysis import generate_analysis_report
 from wechat_mp_spider.auth import WechatAuthService
@@ -42,7 +45,7 @@ def with_spider(args, handler):
         return handler(spider, run_output_dir)
 
 
-def crawl_publishes(args) -> None:
+def _crawl_publishes(args) -> None:
     """抓取发表记录。"""
     def handler(spider: WechatSpider, run_output_dir: Path):
         print("\n===== 抓取发表记录 =====")
@@ -55,7 +58,7 @@ def crawl_publishes(args) -> None:
     with_spider(args, handler)
 
 
-def crawl_fans(args) -> None:
+def _crawl_fans(args) -> None:
     """抓取粉丝数据。"""
     def handler(spider: WechatSpider, run_output_dir: Path):
         print("\n===== 抓取粉丝数据 =====")
@@ -72,7 +75,7 @@ def crawl_fans(args) -> None:
     with_spider(args, handler)
 
 
-def resolve_publish_items(spider: WechatSpider, args) -> list[dict]:
+def _resolve_publish_items(spider: WechatSpider, args) -> list[dict]:
     """按用户显式选择获取文章统计所需的发表记录。"""
     if args.publishes_file:
         print(f"[input] 读取发表记录文件: {args.publishes_file}")
@@ -83,11 +86,11 @@ def resolve_publish_items(spider: WechatSpider, args) -> list[dict]:
     raise SystemExit("抓取文章数据需要 --publishes-file，或显式添加 --fetch-publishes。")
 
 
-def crawl_article_stats(args) -> None:
+def _crawl_article_stats(args) -> None:
     """基于发表记录抓取/整理文章数据。"""
     def handler(spider: WechatSpider, run_output_dir: Path):
         print("\n===== 抓取文章数据 =====")
-        publish_items = resolve_publish_items(spider, args)
+        publish_items = _resolve_publish_items(spider, args)
         items = spider.batch_fetch_articles_stats(publish_items, include_public=args.include_public)
         print(f"[done] 共处理 {len(items)} 篇文章数据")
         if items:
@@ -97,7 +100,7 @@ def crawl_article_stats(args) -> None:
     with_spider(args, handler)
 
 
-def crawl_article_content(args) -> None:
+def _crawl_article_content(args) -> None:
     """按需抓取单篇文章正文。"""
     def handler(spider: WechatSpider, run_output_dir: Path):
         print("\n===== 按需抓取文章正文 =====")
@@ -109,7 +112,7 @@ def crawl_article_content(args) -> None:
     with_spider(args, handler)
 
 
-def generate_report(args) -> None:
+def _generate_report(args) -> None:
     """基于已有数据文件生成分析报告，不触发爬取。"""
     run_output_dir = build_output_dir(args)
     article_stats = load_json(args.article_stats_file)
@@ -125,60 +128,117 @@ def generate_report(args) -> None:
     print(f"[analysis] 分析报告已保存: {report_path}")
 
 
-def add_common_args(parser: argparse.ArgumentParser) -> None:
-    """添加所有命令通用参数。"""
-    parser.add_argument("--output-dir", default=OUTPUT_DIR, help="输出根目录，默认 output/")
-    parser.add_argument(
-        "--headless",
-        default=DEFAULT_HEADLESS,
-        action=argparse.BooleanOptionalAction,
-        help="是否使用 headless 浏览器，默认读取 WECHAT_MP_HEADLESS",
+app = typer.Typer(
+    name="wechat-mp-spider",
+    help="微信公众号后台数据采集工具",
+    no_args_is_help=True,
+    add_completion=False,
+)
+
+
+_OUTPUT_DIR_OPTION = typer.Option(OUTPUT_DIR, "--output-dir", help="输出根目录，默认 output/")
+_HEADLESS_OPTION = typer.Option(
+    DEFAULT_HEADLESS,
+    "--headless/--no-headless",
+    help="是否使用 headless 浏览器，默认读取 WECHAT_MP_HEADLESS",
+)
+
+
+@app.command("publishes", help="抓取发表记录")
+def crawl_publishes(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    max_pages: Optional[int] = typer.Option(None, "--max-pages", help="最多抓取页数"),
+) -> None:
+    """抓取公众号后台的发表记录列表。"""
+    args = SimpleNamespace(output_dir=output_dir, headless=headless, max_pages=max_pages)
+    _crawl_publishes(args)
+
+
+@app.command("fans", help="抓取粉丝数据")
+def crawl_fans(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    start_date: Optional[str] = typer.Option(None, "--start-date", help="开始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = typer.Option(None, "--end-date", help="结束日期 YYYY-MM-DD"),
+) -> None:
+    """抓取指定日期范围内的粉丝汇总数据。"""
+    args = SimpleNamespace(
+        output_dir=output_dir, headless=headless, start_date=start_date, end_date=end_date
     )
+    _crawl_fans(args)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """构建命令行参数解析器。"""
-    parser = argparse.ArgumentParser(description="微信公众号后台数据采集工具")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+@app.command("article-stats", help="基于发表记录生成文章数据")
+def crawl_article_stats(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    publishes_file: Optional[str] = typer.Option(
+        None, "--publishes-file", help="已有 wechat_publishes_*.json 文件"
+    ),
+    fetch_publishes: bool = typer.Option(
+        False, "--fetch-publishes", help="未传文件时显式临时抓取发表记录"
+    ),
+    max_pages: Optional[int] = typer.Option(
+        None, "--max-pages", help="配合 --fetch-publishes 使用，最多抓取页数"
+    ),
+    include_public: bool = typer.Option(
+        False, "--include-public", help="额外访问公开正文页抓取公开阅读数"
+    ),
+) -> None:
+    """基于发表记录批量抓取文章阅读量、点赞等统计数据。"""
+    args = SimpleNamespace(
+        output_dir=output_dir,
+        headless=headless,
+        publishes_file=publishes_file,
+        fetch_publishes=fetch_publishes,
+        max_pages=max_pages,
+        include_public=include_public,
+    )
+    _crawl_article_stats(args)
 
-    publishes = subparsers.add_parser("publishes", help="抓取发表记录")
-    add_common_args(publishes)
-    publishes.add_argument("--max-pages", type=int, default=None, help="最多抓取页数")
-    publishes.set_defaults(func=crawl_publishes)
 
-    fans = subparsers.add_parser("fans", help="抓取粉丝数据")
-    add_common_args(fans)
-    fans.add_argument("--start-date", default=None, help="开始日期 YYYY-MM-DD")
-    fans.add_argument("--end-date", default=None, help="结束日期 YYYY-MM-DD")
-    fans.set_defaults(func=crawl_fans)
+@app.command("article-content", help="按需抓取单篇文章正文")
+def crawl_article_content(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    url: str = typer.Option(..., "--url", help="文章正文 URL"),
+    include_html: bool = typer.Option(
+        False, "--include-html", help="额外保存正文 HTML"
+    ),
+) -> None:
+    """按需抓取单篇文章的完整正文内容。"""
+    args = SimpleNamespace(
+        output_dir=output_dir, headless=headless, url=url, include_html=include_html
+    )
+    _crawl_article_content(args)
 
-    article_stats = subparsers.add_parser("article-stats", help="基于发表记录生成文章数据")
-    add_common_args(article_stats)
-    article_stats.add_argument("--publishes-file", default=None, help="已有 wechat_publishes_*.json 文件")
-    article_stats.add_argument("--fetch-publishes", action="store_true", help="未传文件时显式临时抓取发表记录")
-    article_stats.add_argument("--max-pages", type=int, default=None, help="配合 --fetch-publishes 使用，最多抓取页数")
-    article_stats.add_argument("--include-public", action="store_true", help="额外访问公开正文页抓取公开阅读数")
-    article_stats.set_defaults(func=crawl_article_stats)
 
-    article_content = subparsers.add_parser("article-content", help="按需抓取单篇文章正文")
-    add_common_args(article_content)
-    article_content.add_argument("--url", required=True, help="文章正文 URL")
-    article_content.add_argument("--include-html", action="store_true", help="额外保存正文 HTML")
-    article_content.set_defaults(func=crawl_article_content)
-
-    report = subparsers.add_parser("report", help="基于已有 JSON 生成分析报告")
-    add_common_args(report)
-    report.add_argument("--article-stats-file", required=True, help="wechat_article_stats_*.json 文件")
-    report.add_argument("--fans-summary-file", default=None, help="wechat_fans_summary_normalized.json 文件")
-    report.add_argument("--total-fans", type=int, default=None, help="当前总粉丝数")
-    report.set_defaults(func=generate_report)
-
-    return parser
+@app.command("report", help="基于已有 JSON 生成分析报告")
+def generate_report_cmd(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    article_stats_file: str = typer.Option(
+        ..., "--article-stats-file", help="wechat_article_stats_*.json 文件"
+    ),
+    fans_summary_file: Optional[str] = typer.Option(
+        None, "--fans-summary-file", help="wechat_fans_summary_normalized.json 文件"
+    ),
+    total_fans: Optional[int] = typer.Option(None, "--total-fans", help="当前总粉丝数"),
+) -> None:
+    """基于已有抓取结果生成 Markdown 分析报告，不触发浏览器。"""
+    args = SimpleNamespace(
+        output_dir=output_dir,
+        headless=headless,
+        article_stats_file=article_stats_file,
+        fans_summary_file=fans_summary_file,
+        total_fans=total_fans,
+    )
+    _generate_report(args)
 
 
 def main() -> None:
-    args = build_parser().parse_args()
-    args.func(args)
+    app()
 
 
 if __name__ == "__main__":
