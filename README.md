@@ -1,144 +1,167 @@
-# 微信公众号后台数据服务化采集工具
+# 微信公众号数据采集工具
 
-## 项目位置
+自动抓取你的公众号后台数据：发表记录、粉丝趋势、文章阅读/点赞/分享，还能一键生成内容优化报告。
 
-`~/projects/wechat-mp-spider`
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## 项目结构
+## 30 秒上手
 
-```
-~/projects/wechat-mp-spider
-├── main.py                        # 入口脚本：抓取发表记录、粉丝、文章数据
-├── inspect_response.py            # 调试脚本
-├── requirements.txt
-├── README.md
-├── wechat_mp_cookies.json         # 登录态 cookies（自动生成）
-├── output/                        # 结果输出目录
-└── wechat_mp_spider/              # 核心包
-    ├── __init__.py
-    ├── auth.py                    # 基础设施：浏览器、扫码、cookie、自动重登
-    ├── browser.py                 # Playwright 浏览器生命周期管理
-    ├── config.py                  # 全局配置
-    ├── exceptions.py              # 自定义异常
-    ├── fans.py                    # 公众号粉丝/用户数据抓取
-    ├── article_stats.py           # 单篇文章阅读数据抓取
-    ├── js_engine.py               # JS 对象字面量解析器
-    ├── js_helpers.py              # 页面内执行的 JS 辅助函数
-    ├── parser.py                  # 发表记录页面解析器
-    ├── spider.py                  # 爬虫主入口，组合各数据抓取能力
-    └── utils.py                   # 通用工具
-```
-
-## 设计思路
-
-- **基础设施层** (`auth.py` / `browser.py`)：负责浏览器启动、扫码登录、cookie 持久化、登录态失效自动重登。
-- **业务逻辑层** (`fans.py` / `article_stats.py` / `parser.py`)：负责具体数据的抓取和解析，容易扩展新的数据类型。
-- **编排层** (`spider.py`)：组合各数据抓取能力，提供统一入口。
-- **工具层** (`utils.py` / `config.py` / `exceptions.py` / `js_engine.py`)：通用导出、配置、异常和 JS 解析工具。
-
-## 已支持的数据
-
-| 数据类型 | 方法 | 说明 |
-|---------|------|------|
-| 发表记录 | `spider.fetch_publishes()` | 自动翻页抓取全部发表记录 |
-| 总粉丝数 | `spider.fetch_total_fans()` | 当前公众号总粉丝数 |
-| 用户分析汇总 | `spider.fetch_fans_summary()` | 每日新增/取关/净增/累计粉丝 |
-| 单篇文章阅读数据 | `spider.batch_fetch_articles_stats()` | 基于发表记录批量提取阅读数、点赞数、标题、摘要、封面等 |
-| 公开文章阅读数 | `spider.fetch_public_article_stats(url)` | 访问文章正文页抓取公开阅读数 |
-| 按需文章正文 | `spider.fetch_article_content(url)` | 需要分析具体文章时再抓取正文文本/HTML |
-| 自动分析报告 | `generate_analysis_report()` | 基于文章和粉丝数据生成内容优化建议 |
-
-## 安装
+### 1. 安装
 
 ```bash
-cd ~/projects/wechat-mp-spider
+git clone https://github.com/ec50n9/wechat-mp-spider.git
+cd wechat-mp-spider
+
 pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-## 使用
-
-### 按需采集
-
-入口脚本采用子命令模式，默认不会一股脑抓取全部数据；用户通过命令行参数明确决定采集什么。
-
-首次登录需要设置 `WECHAT_MP_HEADLESS=0` 弹出浏览器窗口扫码；登录态会保存到 `wechat_mp_cookies.json`，后续默认使用 headless 模式自动复用。每次命令会在 `output/` 下创建独立目录。
+### 2. 首次扫码登录
 
 ```bash
-# 查看可用命令
-python main.py --help
-
-# 首次登录/登录态失效时：有界面扫码并保存 cookies
+# 弹出浏览器窗口扫码，登录态会自动保存
 WECHAT_MP_HEADLESS=0 python main.py publishes
+```
 
-# 抓取发表记录
+扫码成功后，`wechat_mp_cookies.json` 会保存你的登录态，后续命令默认在后台运行。
+
+### 3. 日常采集
+
+```bash
+# 抓取全部发表记录
 python main.py publishes
 
 # 抓取粉丝数据
-python main.py fans
+python main.py fans --start-date 2024-01-01 --end-date 2024-01-31
 
-# 基于已有发表记录文件生成文章数据
+# 基于发表记录抓取文章阅读、点赞、分享数据
 python main.py article-stats --publishes-file output/xxx/wechat_publishes_xxx.json
 
-# 不传发表记录文件时，必须显式允许临时抓取发表记录
+# 或者直接临时抓取发表记录再统计文章
 python main.py article-stats --fetch-publishes
 
-# 按需抓取单篇文章正文
-python main.py article-content --url 'https://mp.weixin.qq.com/s/xxx'
+# 抓取单篇文章正文
+python main.py article-content --url 'https://mp.weixin.qq.com/s/xxxxxx'
 
-# 基于已有数据生成分析报告，不触发爬取
-python main.py report --article-stats-file output/xxx/wechat_article_stats_xxx.json --fans-summary-file output/xxx/wechat_fans_summary_normalized.json
+# 生成数据分析报告
+python main.py report \
+  --article-stats-file output/xxx/wechat_article_stats_xxx.json \
+  --fans-summary-file output/xxx/wechat_fans_summary_normalized.json
 ```
 
-### 作为服务使用
+每次运行都会在 `output/` 下生成一个带时间戳的目录，数据自动归档。
 
-```python
-from wechat_mp_spider import WechatAuthService, WechatSpider
-from wechat_mp_spider.config import OUTPUT_DIR
+---
 
-with WechatAuthService(headless=True) as auth:
-    spider = WechatSpider(auth)
+## 实际效果
 
-    # 发表记录
-    publishes = spider.fetch_publishes()
-    spider.save(publishes, OUTPUT_DIR, prefix="wechat_publishes")
+### 抓取发表记录
 
-    # 粉丝数据
-    fans_summary = spider.fetch_fans_summary()
-    total_fans = int(fans_summary["cumulate_user"][-1])
-
-    # 文章阅读数据（包含标题、摘要、封面等元数据）
-    article_stats = spider.batch_fetch_articles_stats(publishes)
-    spider.save(article_stats, OUTPUT_DIR, prefix="wechat_article_stats")
-
-    # 按需抓取具体文章正文
-    content = spider.fetch_article_content(article_stats[0]["content_url"])
+```bash
+python main.py publishes --max-pages 3
 ```
 
-## 扩展新的数据类型
+输出示例：
 
-1. 在 `wechat_mp_spider/` 下新增数据获取器（例如 `message.py`）
-2. 在 `spider.py` 的 `__init__` 中初始化并暴露方法
-3. 在业务脚本或 `main.py` 中调用
+```
+===== 抓取发表记录 =====
+[done] 共抓取 30 条发表记录
+{
+  "title": "为什么你的 Python 脚本越写越慢",
+  "publish_time": "2024-01-15 09:30:00",
+  "content_url": "https://mp.weixin.qq.com/s/xxxxx",
+  ...
+}
+```
 
-## 配置项
+### 抓取文章统计数据
 
-在 `wechat_mp_spider/config.py` 中可调整：
+```bash
+python main.py article-stats --fetch-publishes --include-public
+```
 
-- `DEFAULT_PAGE_SIZE`：每页条数
-- `DEFAULT_SLEEP_BETWEEN_PAGES`：翻页间隔
-- `DEFAULT_PAGE_TIMEOUT`：页面加载超时
-- `DEFAULT_LOGIN_TIMEOUT`：扫码登录超时
-- `DEFAULT_HEADLESS`：是否默认使用 headless 模式，可通过环境变量 `WECHAT_MP_HEADLESS=0/1` 覆盖
+输出包含每篇文章的阅读数、点赞数、在看数、分享数、收藏数，以及标题、摘要、封面等元数据。
 
-## 登录态失效处理
+### 生成分析报告
 
-- `WechatAuthService` 启动时会尝试复用 `wechat_mp_cookies.json`
-- 如果 cookies 过期，会自动清除并重新扫码登录
-- 爬虫运行中检测到登录页重定向时，也会调用 `auth.refresh_login()` 重新登录
+```bash
+python main.py report \
+  --article-stats-file output/20240620_210512/wechat_article_stats_xxx.json \
+  --fans-summary-file output/20240620_210512/wechat_fans_summary_normalized.json
+```
 
-## 注意事项
+会自动生成 `analysis.md`，包含：
 
-- 本工具仅用于采集你自己运营的公众号数据
-- 建议保持合理的请求频率，避免触发平台风控
-- 粉丝数据页面使用 `window.CGI_DATA` 内嵌 JS 对象，已用 `js_engine.py` 做非标准 JSON 解析
+- 阅读 Top 10 / 互动 Top 10
+- 标题长度、发布时间、文章位置对阅读量的影响
+- 粉丝增长趋势
+- 下次写什么、怎么优化的具体建议
+
+---
+
+## 命令速查
+
+```bash
+python main.py --help
+```
+
+| 命令 | 作用 | 示例 |
+|------|------|------|
+| `publishes` | 抓取发表记录 | `python main.py publishes --max-pages 5` |
+| `fans` | 抓取粉丝汇总 | `python main.py fans --start-date 2024-01-01` |
+| `article-stats` | 文章阅读/互动数据 | `python main.py article-stats --fetch-publishes` |
+| `article-content` | 单篇文章正文 | `python main.py article-content --url <URL>` |
+| `report` | 生成分析报告 | `python main.py report --article-stats-file <文件>` |
+
+通用选项：
+
+- `--output-dir`：输出目录，默认 `output/`
+- `--headless / --no-headless`：是否后台运行浏览器
+- `--help`：查看命令帮助
+
+---
+
+## 一个完整的工作流
+
+```bash
+# 1. 抓取发表记录
+python main.py publishes
+
+# 假设输出目录为 output/20240620_210512
+# 2. 基于发表记录抓取文章统计
+python main.py article-stats \
+  --publishes-file output/20240620_210512/wechat_publishes_xxx.json
+
+# 3. 抓取粉丝数据
+python main.py fans
+
+# 4. 生成分析报告
+python main.py report \
+  --article-stats-file output/20240620_210512/wechat_article_stats_xxx.json \
+  --fans-summary-file output/20240620_210512/wechat_fans_summary_normalized.json
+```
+
+然后打开 `output/20240620_210512/analysis.md` 即可看到分析结论。
+
+---
+
+## 常见问题
+
+**Q: 登录态会过期吗？**  
+A: 会。过期后再次运行任意命令会自动重新扫码，或手动用 `WECHAT_MP_HEADLESS=0 python main.py publishes` 重新登录。
+
+**Q: 可以不开浏览器窗口吗？**  
+A: 可以。首次扫码后，后续默认 headless 模式在后台运行。
+
+**Q: 输出文件在哪里？**  
+A: 每次运行都会在 `output/` 下生成 `YYYYMMDD_HHMMSS` 目录，所有结果按时间归档。
+
+**Q: 会不会提交我的 cookies 到 GitHub？**  
+A: 不会。`wechat_mp_cookies.json`、`output/`、`.env` 等敏感/临时文件已在 `.gitignore` 中排除。
+
+---
+
+## 声明
+
+本工具仅用于采集你自己拥有管理权限的微信公众号数据，请遵守微信平台规则，合理控制请求频率。
