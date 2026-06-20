@@ -3,6 +3,7 @@
 import csv
 import html as html_module
 import json
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -12,6 +13,13 @@ def extract_token_from_url(url: str) -> str | None:
     parsed = urlparse(url)
     qs = parse_qs(parsed.query)
     return qs.get("token", [None])[0]
+
+
+def create_run_output_dir(output_dir: Path) -> Path:
+    """创建本次运行独立输出目录。"""
+    run_dir = output_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir.mkdir(parents=True, exist_ok=False)
+    return run_dir
 
 
 def save_json(data, path: Path) -> None:

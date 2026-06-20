@@ -62,7 +62,15 @@ python -m playwright install chromium
 python main.py
 ```
 
-首次运行会弹出浏览器窗口让你扫码登录；登录态会保存到 `wechat_mp_cookies.json`，后续运行自动复用。
+首次登录需要设置 `WECHAT_MP_HEADLESS=0` 弹出浏览器窗口扫码；登录态会保存到 `wechat_mp_cookies.json`，后续默认使用 headless 模式自动复用。
+
+```bash
+# 首次登录/登录态失效时：有界面扫码并保存 cookies
+WECHAT_MP_HEADLESS=0 python main.py
+
+# 已有有效 cookies 后：默认 headless 爬取
+python main.py
+```
 
 ### 作为服务使用
 
@@ -70,7 +78,7 @@ python main.py
 from wechat_mp_spider import WechatAuthService, WechatSpider
 from wechat_mp_spider.config import OUTPUT_DIR
 
-with WechatAuthService(headless=False) as auth:
+with WechatAuthService(headless=True) as auth:
     spider = WechatSpider(auth)
 
     # 发表记录
@@ -100,6 +108,7 @@ with WechatAuthService(headless=False) as auth:
 - `DEFAULT_SLEEP_BETWEEN_PAGES`：翻页间隔
 - `DEFAULT_PAGE_TIMEOUT`：页面加载超时
 - `DEFAULT_LOGIN_TIMEOUT`：扫码登录超时
+- `DEFAULT_HEADLESS`：是否默认使用 headless 模式，可通过环境变量 `WECHAT_MP_HEADLESS=0/1` 覆盖
 
 ## 登录态失效处理
 

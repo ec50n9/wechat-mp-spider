@@ -1,5 +1,6 @@
 """全局配置。"""
 
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,3 +20,4 @@ DEFAULT_PAGE_SIZE = 10
 DEFAULT_SLEEP_BETWEEN_PAGES = 2.0
 DEFAULT_PAGE_TIMEOUT = 30_000
 DEFAULT_LOGIN_TIMEOUT = 120_000
+DEFAULT_HEADLESS = os.getenv("WECHAT_MP_HEADLESS", "1").lower() not in {"0", "false", "no", "off"}

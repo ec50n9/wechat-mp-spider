@@ -14,7 +14,7 @@ from pathlib import Path
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from wechat_mp_spider.browser import BrowserManager
-from wechat_mp_spider.config import COOKIE_FILE, DEFAULT_LOGIN_TIMEOUT, HOME_URL_PATTERN, LOGIN_URL
+from wechat_mp_spider.config import COOKIE_FILE, DEFAULT_HEADLESS, DEFAULT_LOGIN_TIMEOUT, HOME_URL_PATTERN, LOGIN_URL
 from wechat_mp_spider.exceptions import CookieExpiredError, LoginTimeoutError, TokenError
 from wechat_mp_spider.utils import extract_token_from_url
 
@@ -26,7 +26,7 @@ class WechatAuthService:
         self,
         cookie_file: Path = COOKIE_FILE,
         login_timeout: int = DEFAULT_LOGIN_TIMEOUT,
-        headless: bool = False,
+        headless: bool = DEFAULT_HEADLESS,
     ):
         self.cookie_file = Path(cookie_file)
         self.login_timeout = login_timeout
@@ -107,6 +107,13 @@ class WechatAuthService:
                 self._page.close()
                 self._page = self._context.new_page()
 
+        if self.headless:
+            raise LoginTimeoutError(
+                "headless 模式无法完成首次扫码登录；"
+                "请先设置 WECHAT_MP_HEADLESS=0 运行一次并扫码保存 cookies，"
+                "之后即可使用 headless 复用登录态爬取。"
+            )
+
         return self._scan_login()
 
     def _try_reuse_login(self) -> str | None:
@@ -162,6 +169,11 @@ class WechatAuthService:
         self.clear_cookies()
         if self._page:
             self._page.close()
+        if self.headless:
+            raise LoginTimeoutError(
+                "登录态已失效，headless 模式无法重新扫码；"
+                "请设置 WECHAT_MP_HEADLESS=0 重新登录并保存 cookies 后再运行。"
+            )
         self._page = self._context.new_page()
         return self._scan_login()
 

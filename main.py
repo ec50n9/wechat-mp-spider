@@ -5,14 +5,18 @@
 import json
 
 from wechat_mp_spider.auth import WechatAuthService
-from wechat_mp_spider.config import OUTPUT_DIR
+from wechat_mp_spider.config import DEFAULT_HEADLESS, OUTPUT_DIR
 from wechat_mp_spider.spider import WechatSpider
+from wechat_mp_spider.utils import create_run_output_dir
 
 
 def main():
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    run_output_dir = create_run_output_dir(OUTPUT_DIR)
 
-    with WechatAuthService(headless=False) as auth:
+    print(f"[config] Playwright headless={DEFAULT_HEADLESS}")
+    print(f"[config] 本次输出目录: {run_output_dir}")
+
+    with WechatAuthService(headless=DEFAULT_HEADLESS) as auth:
         spider = WechatSpider(auth)
 
         # 1. 抓取发表记录
@@ -20,7 +24,7 @@ def main():
         publish_items = spider.fetch_publishes()
         print(f"[done] 共抓取 {len(publish_items)} 条发表记录")
         if publish_items:
-            spider.save(publish_items, OUTPUT_DIR, prefix="wechat_publishes")
+            spider.save(publish_items, run_output_dir, prefix="wechat_publishes")
             print(json.dumps(publish_items[0], ensure_ascii=False, indent=2)[:600])
 
         # 2. 抓取总粉丝数
@@ -48,7 +52,7 @@ def main():
             article_stats = spider.batch_fetch_articles_stats(publish_items, include_public=False)
             print(f"[done] 共抓取 {len(article_stats)} 篇文章数据")
             if article_stats:
-                spider.save(article_stats, OUTPUT_DIR, prefix="wechat_article_stats")
+                spider.save(article_stats, run_output_dir, prefix="wechat_article_stats")
                 print(json.dumps(article_stats[0], ensure_ascii=False, indent=2)[:600])
         except Exception as e:
             print(f"[error] 批量抓取文章阅读数据失败: {e}")
