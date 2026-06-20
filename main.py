@@ -128,11 +128,19 @@ def _generate_report(args) -> None:
     print(f"[analysis] 分析报告已保存: {report_path}")
 
 
+def _default_callback(ctx: typer.Context) -> None:
+    """未提供子命令时友好地展示帮助信息并正常退出。"""
+    if ctx.invoked_subcommand is None:
+        print(ctx.get_help())
+        raise typer.Exit(code=0)
+
+
 app = typer.Typer(
     name="wechat-mp-spider",
     help="微信公众号后台数据采集工具",
-    no_args_is_help=True,
     add_completion=False,
+    callback=_default_callback,
+    invoke_without_command=True,
 )
 
 
