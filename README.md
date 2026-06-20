@@ -43,8 +43,10 @@
 | 发表记录 | `spider.fetch_publishes()` | 自动翻页抓取全部发表记录 |
 | 总粉丝数 | `spider.fetch_total_fans()` | 当前公众号总粉丝数 |
 | 用户分析汇总 | `spider.fetch_fans_summary()` | 每日新增/取关/净增/累计粉丝 |
-| 单篇文章阅读数据 | `spider.batch_fetch_articles_stats()` | 基于发表记录批量提取阅读数、点赞数等 |
+| 单篇文章阅读数据 | `spider.batch_fetch_articles_stats()` | 基于发表记录批量提取阅读数、点赞数、标题、摘要、封面等 |
 | 公开文章阅读数 | `spider.fetch_public_article_stats(url)` | 访问文章正文页抓取公开阅读数 |
+| 按需文章正文 | `spider.fetch_article_content(url)` | 需要分析具体文章时再抓取正文文本/HTML |
+| 自动分析报告 | `generate_analysis_report()` | 基于文章和粉丝数据生成内容优化建议 |
 
 ## 安装
 
@@ -62,7 +64,7 @@ python -m playwright install chromium
 python main.py
 ```
 
-首次登录需要设置 `WECHAT_MP_HEADLESS=0` 弹出浏览器窗口扫码；登录态会保存到 `wechat_mp_cookies.json`，后续默认使用 headless 模式自动复用。
+首次登录需要设置 `WECHAT_MP_HEADLESS=0` 弹出浏览器窗口扫码；登录态会保存到 `wechat_mp_cookies.json`，后续默认使用 headless 模式自动复用。每次运行会在 `output/` 下创建独立目录，保存发表记录、粉丝数据、文章数据和 `analysis.md` 分析报告。
 
 ```bash
 # 首次登录/登录态失效时：有界面扫码并保存 cookies
@@ -86,12 +88,15 @@ with WechatAuthService(headless=True) as auth:
     spider.save(publishes, OUTPUT_DIR, prefix="wechat_publishes")
 
     # 粉丝数据
-    total_fans = spider.fetch_total_fans()
     fans_summary = spider.fetch_fans_summary()
+    total_fans = int(fans_summary["cumulate_user"][-1])
 
-    # 文章阅读数据
+    # 文章阅读数据（包含标题、摘要、封面等元数据）
     article_stats = spider.batch_fetch_articles_stats(publishes)
     spider.save(article_stats, OUTPUT_DIR, prefix="wechat_article_stats")
+
+    # 按需抓取具体文章正文
+    content = spider.fetch_article_content(article_stats[0]["content_url"])
 ```
 
 ## 扩展新的数据类型

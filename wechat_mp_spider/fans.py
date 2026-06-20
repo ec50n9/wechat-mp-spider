@@ -22,7 +22,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from wechat_mp_spider.config import DEFAULT_PAGE_TIMEOUT, OUTPUT_DIR
+from wechat_mp_spider.config import DEFAULT_PAGE_TIMEOUT
 from wechat_mp_spider.exceptions import FetchError
 from wechat_mp_spider.js_engine import js_object_to_json
 
@@ -43,6 +43,7 @@ class FansDataFetcher:
         start_date: str | None = None,
         end_date: str | None = None,
         max_wait_ms: int = 10_000,
+        debug_dir: Path | None = None,
     ) -> dict:
         """
         抓取用户分析汇总数据。
@@ -51,6 +52,7 @@ class FansDataFetcher:
             start_date: 开始日期，格式 YYYY-MM-DD，默认 7 天前
             end_date: 结束日期，格式 YYYY-MM-DD，默认今天
             max_wait_ms: 等待页面数据加载的最大时间
+            debug_dir: 调试页面输出目录，None 表示不保存调试页面
 
         Returns:
             {
@@ -78,10 +80,11 @@ class FansDataFetcher:
 
         html = page.content()
 
-        # 保存调试页面
-        debug_path = OUTPUT_DIR / f"fans_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-        debug_path.write_text(html, encoding="utf-8")
-        print(f"[fans] 已保存调试页面: {debug_path}")
+        if debug_dir:
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            debug_path = debug_dir / f"fans_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+            debug_path.write_text(html, encoding="utf-8")
+            print(f"[fans] 已保存调试页面: {debug_path}")
 
         raw_data = self._extract_cgi_data(html)
         if raw_data:

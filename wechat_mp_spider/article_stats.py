@@ -9,6 +9,7 @@ import json
 import re
 import time
 from datetime import datetime
+from typing import Any
 
 from wechat_mp_spider.config import DEFAULT_PAGE_TIMEOUT
 from wechat_mp_spider.exceptions import FetchError
@@ -129,6 +130,103 @@ class ArticleStatsFetcher:
 
         return result
 
+    def fetch_article_content_from_content_url(
+        self,
+        content_url: str,
+        wait_ms: int = 5000,
+        include_html: bool = False,
+    ) -> dict:
+        """
+        按需抓取文章正文内容。
+
+        默认只返回正文纯文本和页面元数据；include_html=True 时额外返回正文 HTML，
+        适合后续需要分析文章结构、图片位置或排版时单篇调用。
+        """
+        self.auth.ensure_token()
+        page = self.auth.page
+
+        print(f"[article] 按需采集文章正文: {content_url}")
+        page.goto(content_url, wait_until="networkidle", timeout=self.page_timeout)
+        page.wait_for_timeout(wait_ms)
+
+        def first_text(selectors: list[str]) -> str | None:
+            for selector in selectors:
+                try:
+                    text = page.locator(selector).first.inner_text().strip()
+                    if text:
+                        return text
+                except Exception:
+                    continue
+            return None
+
+        def first_attr(selectors: list[str], attr: str) -> str | None:
+            for selector in selectors:
+                try:
+                    value = page.locator(selector).first.get_attribute(attr)
+                    if value:
+                        return value
+                except Exception:
+                    continue
+            return None
+
+        content_text = first_text(["#js_content", ".rich_media_content"])
+        content_html = None
+        if include_html:
+            try:
+                content_html = page.locator("#js_content").first.inner_html()
+            except Exception:
+                content_html = None
+
+        image_count = 0
+        try:
+            image_count = page.locator("#js_content img").count()
+        except Exception:
+            pass
+
+        result = {
+            "content_url": content_url,
+            "source": "content_page",
+            "title": first_text(["#activity-name", "#activity_name", ".rich_media_title"]),
+            "author": first_text(["#js_name", ".rich_media_meta_text.rich_media_meta_nickname"]),
+            "publish_time_text": first_text(["#publish_time", "#js_publish_time"]),
+            "digest": first_attr(['meta[name="description"]', 'meta[property="og:description"]'], "content"),
+            "cover": first_attr(['meta[property="og:image"]', 'meta[name="twitter:image"]'], "content"),
+            "content_text": content_text,
+            "content_length": len(content_text or ""),
+            "image_count": image_count,
+        }
+        if include_html:
+            result["content_html"] = content_html
+        return result
+
+    @staticmethod
+    def _extract_article_metadata(appmsg: dict[str, Any]) -> dict:
+        """从发表记录 appmsg_info 中提取影响阅读表现的文章元数据。"""
+        title = appmsg.get("title") or ""
+        digest = appmsg.get("digest") or ""
+        cover = appmsg.get("cover") or ""
+        cover_16_9 = appmsg.get("pic_cdn_url_16_9") or ""
+        cover_235_1 = appmsg.get("pic_cdn_url_235_1") or ""
+        return {
+            "title": title,
+            "title_length": len(title),
+            "digest": digest,
+            "digest_length": len(digest),
+            "author": appmsg.get("author"),
+            "cover": cover,
+            "cover_16_9": cover_16_9,
+            "cover_235_1": cover_235_1,
+            "has_cover": bool(cover or cover_16_9 or cover_235_1),
+            "source_url": appmsg.get("source_url"),
+            "copyright_status": appmsg.get("copyright_status"),
+            "copyright_type": appmsg.get("copyright_type"),
+            "share_num": appmsg.get("share_num"),
+            "comment_num": appmsg.get("comment_num"),
+            "reprint_num": appmsg.get("reprint_num"),
+            "moment_like_num": appmsg.get("moment_like_num"),
+            "multi_picture_cover": appmsg.get("multi_picture_cover"),
+        }
+
     def fetch_all_articles_stats(
         self,
         publish_items: list[dict],
@@ -158,12 +256,12 @@ class ArticleStatsFetcher:
                 record = {
                     "appmsgid": appmsgid,
                     "itemidx": itemidx,
-                    "title": appmsg.get("title"),
                     "content_url": content_url,
                     "publish_time": publish_info.get("sent_info", {}).get("time"),
                     "read_num": appmsg.get("read_num"),
                     "like_num": appmsg.get("like_num"),
                     "old_like_num": appmsg.get("old_like_num"),
+                    **self._extract_article_metadata(appmsg),
                 }
 
                 if include_public and content_url:

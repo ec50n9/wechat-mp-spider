@@ -4,6 +4,7 @@
 
 import json
 
+from wechat_mp_spider.analysis import generate_analysis_report
 from wechat_mp_spider.auth import WechatAuthService
 from wechat_mp_spider.config import DEFAULT_HEADLESS, OUTPUT_DIR
 from wechat_mp_spider.spider import WechatSpider
@@ -27,24 +28,23 @@ def main():
             spider.save(publish_items, run_output_dir, prefix="wechat_publishes")
             print(json.dumps(publish_items[0], ensure_ascii=False, indent=2)[:600])
 
-        # 2. 抓取总粉丝数
-        print("\n===== 抓取总粉丝数 =====")
+        # 2. 抓取用户分析汇总和总粉丝数
+        fans_summary = None
+        total_fans = None
+        print("\n===== 抓取粉丝数据 =====")
         try:
-            total_fans = spider.fetch_total_fans()
+            fans_summary = spider.fetch_fans_summary(debug_dir=run_output_dir)
+            cumulate_user = fans_summary.get("cumulate_user", [])
+            total_fans = int(cumulate_user[-1]) if cumulate_user else None
             print(f"[done] 当前总粉丝数: {total_fans}")
-        except Exception as e:
-            print(f"[error] 抓取总粉丝数失败: {e}")
-
-        # 3. 抓取用户分析汇总（最近 7 天）
-        print("\n===== 抓取用户分析汇总 =====")
-        try:
-            fans_summary = spider.fetch_fans_summary()
             print(f"[done] 用户分析汇总: {fans_summary.get('dates', [])}")
             print(f"[done] 新增用户: {fans_summary.get('new_user', [])}")
             print(f"[done] 净增用户: {fans_summary.get('net_gain', [])}")
             print(f"[done] 累计用户: {fans_summary.get('cumulate_user', [])}")
+            spider.save([{"total_fans": total_fans}], run_output_dir, prefix="wechat_total_fans")
+            spider.save(fans_summary.get("raw", []), run_output_dir, prefix="wechat_fans_summary")
         except Exception as e:
-            print(f"[error] 抓取用户分析汇总失败: {e}")
+            print(f"[error] 抓取粉丝数据失败: {e}")
 
         # 4. 批量抓取单篇文章阅读数据
         print("\n===== 批量抓取文章阅读数据 =====")
@@ -54,6 +54,11 @@ def main():
             if article_stats:
                 spider.save(article_stats, run_output_dir, prefix="wechat_article_stats")
                 print(json.dumps(article_stats[0], ensure_ascii=False, indent=2)[:600])
+
+                analysis_report = generate_analysis_report(article_stats, fans_summary, total_fans)
+                analysis_path = run_output_dir / "analysis.md"
+                analysis_path.write_text(analysis_report, encoding="utf-8")
+                print(f"[analysis] 分析报告已保存: {analysis_path}")
         except Exception as e:
             print(f"[error] 批量抓取文章阅读数据失败: {e}")
 

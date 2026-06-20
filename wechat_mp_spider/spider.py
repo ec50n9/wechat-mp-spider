@@ -143,9 +143,10 @@ class WechatSpider:
         self,
         start_date: str | None = None,
         end_date: str | None = None,
+        debug_dir: Path | None = None,
     ) -> dict:
         """抓取用户分析汇总数据。"""
-        return self.fans.fetch_user_summary(start_date, end_date)
+        return self.fans.fetch_user_summary(start_date, end_date, debug_dir=debug_dir)
 
     def fetch_total_fans(self) -> int:
         """抓取当前总粉丝数。"""
@@ -163,6 +164,14 @@ class WechatSpider:
     def fetch_public_article_stats(self, content_url: str) -> dict:
         """通过文章正文链接抓取公开阅读数据。"""
         return self.articles.fetch_article_stats_from_content_url(content_url)
+
+    def fetch_article_content(
+        self,
+        content_url: str,
+        include_html: bool = False,
+    ) -> dict:
+        """按需抓取单篇文章正文内容。"""
+        return self.articles.fetch_article_content_from_content_url(content_url, include_html=include_html)
 
     def batch_fetch_articles_stats(
         self,
