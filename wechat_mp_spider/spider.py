@@ -19,6 +19,7 @@ from wechat_mp_spider.config import (
     DEFAULT_PAGE_TIMEOUT,
     DEFAULT_SLEEP_BETWEEN_PAGES,
 )
+from wechat_mp_spider.drafts import DraftsManager
 from wechat_mp_spider.exceptions import CookieExpiredError, FetchError
 from wechat_mp_spider.fans import FansDataFetcher
 from wechat_mp_spider.parser import PublishPageParser
@@ -41,6 +42,7 @@ class WechatSpider:
         self.page_timeout = page_timeout
         self.fans = FansDataFetcher(auth, page_timeout=page_timeout)
         self.articles = ArticleStatsFetcher(auth, page_timeout=page_timeout)
+        self.drafts = DraftsManager(auth, page_timeout=page_timeout)
 
     # ==================== 发表记录抓取 ====================
     def fetch_publishes(

@@ -142,6 +142,115 @@ def _crawl_article_content(args) -> None:
     with_spider(args, handler)
 
 
+# ==================== 草稿箱命令 ====================
+def _list_drafts(args) -> None:
+    """获取草稿箱列表。"""
+    def handler(spider: WechatSpider, run_output_dir: Path | None):
+        if not args.stdout:
+            print("\n===== 获取草稿箱列表 =====")
+        items = spider.drafts.fetch_all_drafts(
+            max_pages=args.max_pages, page_size=args.page_size, query=args.query
+        )
+        if args.stdout:
+            print_json(items)
+            return
+        print(f"[done] 共获取 {len(items)} 篇草稿")
+        if items:
+            spider.save(items, run_output_dir, prefix="wechat_drafts")
+            print_json(items[0] if isinstance(items, list) else items, sample=True)
+
+    with_spider(args, handler)
+
+
+def _get_draft(args) -> None:
+    """获取单篇草稿详情。"""
+    def handler(spider: WechatSpider, run_output_dir: Path | None):
+        if not args.stdout:
+            print(f"\n===== 获取草稿详情: {args.appmsgid} =====")
+        detail = spider.drafts.fetch_draft_detail(args.appmsgid)
+        if args.stdout:
+            print_json(detail)
+            return
+        save_json(detail, run_output_dir / f"wechat_draft_{args.appmsgid}.json")
+        print(f"[spider] 草稿详情已保存: {run_output_dir / f'wechat_draft_{args.appmsgid}.json'}")
+        print_json(detail, sample=True)
+
+    with_spider(args, handler)
+
+
+def _create_draft(args) -> None:
+    """创建新草稿。"""
+    def handler(spider: WechatSpider, run_output_dir: Path | None):
+        if not args.stdout:
+            print("\n===== 创建草稿 =====")
+        content = args.content
+        if args.content_file:
+            content = Path(args.content_file).read_text(encoding="utf-8")
+        result = spider.drafts.create_draft(
+            title=args.title,
+            content=content,
+            author=args.author,
+            digest=args.digest,
+            cover_url=args.cover_url,
+            content_source_url=args.content_source_url,
+            need_open_comment=int(args.need_open_comment),
+            only_fans_can_comment=int(args.only_fans_can_comment),
+        )
+        if args.stdout:
+            print_json(result)
+            return
+        save_json(result, run_output_dir / "wechat_draft_created.json")
+        print(f"[spider] 草稿创建结果已保存: {run_output_dir / 'wechat_draft_created.json'}")
+        print_json(result, sample=True)
+
+    with_spider(args, handler)
+
+
+def _update_draft(args) -> None:
+    """更新草稿。"""
+    def handler(spider: WechatSpider, run_output_dir: Path | None):
+        if not args.stdout:
+            print(f"\n===== 更新草稿: {args.appmsgid} =====")
+        content = args.content
+        if args.content_file:
+            content = Path(args.content_file).read_text(encoding="utf-8")
+        result = spider.drafts.update_draft(
+            appmsgid=args.appmsgid,
+            title=args.title,
+            content=content,
+            author=args.author,
+            digest=args.digest,
+            cover_url=args.cover_url,
+            content_source_url=args.content_source_url,
+            need_open_comment=int(args.need_open_comment),
+            only_fans_can_comment=int(args.only_fans_can_comment),
+        )
+        if args.stdout:
+            print_json(result)
+            return
+        save_json(result, run_output_dir / f"wechat_draft_{args.appmsgid}_updated.json")
+        print(f"[spider] 草稿更新结果已保存: {run_output_dir / f'wechat_draft_{args.appmsgid}_updated.json'}")
+        print_json(result, sample=True)
+
+    with_spider(args, handler)
+
+
+def _delete_draft(args) -> None:
+    """删除草稿。"""
+    def handler(spider: WechatSpider, run_output_dir: Path | None):
+        if not args.stdout:
+            print(f"\n===== 删除草稿: {args.appmsgid} =====")
+        result = spider.drafts.delete_draft(args.appmsgid)
+        if args.stdout:
+            print_json(result)
+            return
+        save_json(result, run_output_dir / f"wechat_draft_{args.appmsgid}_deleted.json")
+        print(f"[spider] 草稿删除结果已保存: {run_output_dir / f'wechat_draft_{args.appmsgid}_deleted.json'}")
+        print_json(result, sample=True)
+
+    with_spider(args, handler)
+
+
 def _generate_report(args) -> None:
     """基于已有数据文件生成分析报告，不触发爬取。"""
     run_output_dir = build_output_dir(args)
@@ -288,6 +397,135 @@ def generate_report_cmd(
         total_fans=total_fans,
     )
     _generate_report(args)
+
+
+@app.command("drafts", help="获取草稿箱列表")
+def list_drafts(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    stdout: bool = _STDOUT_OPTION,
+    max_pages: Optional[int] = typer.Option(None, "--max-pages", help="最多翻页数"),
+    page_size: int = typer.Option(10, "--page-size", help="每页数量"),
+    query: str = typer.Option("", "--query", help="搜索关键词"),
+) -> None:
+    """获取公众号草稿箱列表。"""
+    args = SimpleNamespace(
+        output_dir=output_dir,
+        headless=headless,
+        stdout=stdout,
+        max_pages=max_pages,
+        page_size=page_size,
+        query=query,
+    )
+    _list_drafts(args)
+
+
+@app.command("draft", help="获取单篇草稿详情")
+def get_draft(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    stdout: bool = _STDOUT_OPTION,
+    appmsgid: str = typer.Option(..., "--appmsgid", help="草稿 ID"),
+) -> None:
+    """根据 appmsgid 获取草稿详情。"""
+    args = SimpleNamespace(
+        output_dir=output_dir, headless=headless, stdout=stdout, appmsgid=appmsgid
+    )
+    _get_draft(args)
+
+
+@app.command("create-draft", help="创建图文草稿")
+def create_draft(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    stdout: bool = _STDOUT_OPTION,
+    title: str = typer.Option(..., "--title", help="草稿标题"),
+    content: str = typer.Option("", "--content", help="正文内容（HTML）"),
+    content_file: Optional[str] = typer.Option(
+        None, "--content-file", help="从文件读取正文内容"
+    ),
+    author: str = typer.Option("", "--author", help="作者"),
+    digest: str = typer.Option("", "--digest", help="摘要"),
+    cover_url: str = typer.Option("", "--cover-url", help="封面图片 URL"),
+    content_source_url: str = typer.Option("", "--content-source-url", help="原文链接"),
+    need_open_comment: bool = typer.Option(False, "--need-open-comment", help="是否开启评论"),
+    only_fans_can_comment: bool = typer.Option(
+        False, "--only-fans-can-comment", help="是否仅粉丝可评论"
+    ),
+) -> None:
+    """创建一篇新的图文草稿。"""
+    if not content and not content_file:
+        raise typer.BadParameter("--content 和 --content-file 至少提供一个")
+    args = SimpleNamespace(
+        output_dir=output_dir,
+        headless=headless,
+        stdout=stdout,
+        title=title,
+        content=content,
+        content_file=content_file,
+        author=author,
+        digest=digest,
+        cover_url=cover_url,
+        content_source_url=content_source_url,
+        need_open_comment=need_open_comment,
+        only_fans_can_comment=only_fans_can_comment,
+    )
+    _create_draft(args)
+
+
+@app.command("update-draft", help="更新图文草稿")
+def update_draft(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    stdout: bool = _STDOUT_OPTION,
+    appmsgid: str = typer.Option(..., "--appmsgid", help="草稿 ID"),
+    title: str = typer.Option(..., "--title", help="草稿标题"),
+    content: str = typer.Option("", "--content", help="正文内容（HTML）"),
+    content_file: Optional[str] = typer.Option(
+        None, "--content-file", help="从文件读取正文内容"
+    ),
+    author: str = typer.Option("", "--author", help="作者"),
+    digest: str = typer.Option("", "--digest", help="摘要"),
+    cover_url: str = typer.Option("", "--cover-url", help="封面图片 URL"),
+    content_source_url: str = typer.Option("", "--content-source-url", help="原文链接"),
+    need_open_comment: bool = typer.Option(False, "--need-open-comment", help="是否开启评论"),
+    only_fans_can_comment: bool = typer.Option(
+        False, "--only-fans-can-comment", help="是否仅粉丝可评论"
+    ),
+) -> None:
+    """更新一篇已有的图文草稿。"""
+    if not content and not content_file:
+        raise typer.BadParameter("--content 和 --content-file 至少提供一个")
+    args = SimpleNamespace(
+        output_dir=output_dir,
+        headless=headless,
+        stdout=stdout,
+        appmsgid=appmsgid,
+        title=title,
+        content=content,
+        content_file=content_file,
+        author=author,
+        digest=digest,
+        cover_url=cover_url,
+        content_source_url=content_source_url,
+        need_open_comment=need_open_comment,
+        only_fans_can_comment=only_fans_can_comment,
+    )
+    _update_draft(args)
+
+
+@app.command("delete-draft", help="删除图文草稿")
+def delete_draft(
+    output_dir: Path = _OUTPUT_DIR_OPTION,
+    headless: bool = _HEADLESS_OPTION,
+    stdout: bool = _STDOUT_OPTION,
+    appmsgid: str = typer.Option(..., "--appmsgid", help="草稿 ID"),
+) -> None:
+    """删除指定草稿。"""
+    args = SimpleNamespace(
+        output_dir=output_dir, headless=headless, stdout=stdout, appmsgid=appmsgid
+    )
+    _delete_draft(args)
 
 
 def main() -> None:
