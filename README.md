@@ -58,20 +58,36 @@ python -m playwright install chromium
 
 ## 使用
 
-### 一键抓取全部数据
+### 按需采集
+
+入口脚本采用子命令模式，默认不会一股脑抓取全部数据；用户通过命令行参数明确决定采集什么。
+
+首次登录需要设置 `WECHAT_MP_HEADLESS=0` 弹出浏览器窗口扫码；登录态会保存到 `wechat_mp_cookies.json`，后续默认使用 headless 模式自动复用。每次命令会在 `output/` 下创建独立目录。
 
 ```bash
-python main.py
-```
+# 查看可用命令
+python main.py --help
 
-首次登录需要设置 `WECHAT_MP_HEADLESS=0` 弹出浏览器窗口扫码；登录态会保存到 `wechat_mp_cookies.json`，后续默认使用 headless 模式自动复用。每次运行会在 `output/` 下创建独立目录，保存发表记录、粉丝数据、文章数据和 `analysis.md` 分析报告。
-
-```bash
 # 首次登录/登录态失效时：有界面扫码并保存 cookies
-WECHAT_MP_HEADLESS=0 python main.py
+WECHAT_MP_HEADLESS=0 python main.py publishes
 
-# 已有有效 cookies 后：默认 headless 爬取
-python main.py
+# 抓取发表记录
+python main.py publishes
+
+# 抓取粉丝数据
+python main.py fans
+
+# 基于已有发表记录文件生成文章数据
+python main.py article-stats --publishes-file output/xxx/wechat_publishes_xxx.json
+
+# 不传发表记录文件时，必须显式允许临时抓取发表记录
+python main.py article-stats --fetch-publishes
+
+# 按需抓取单篇文章正文
+python main.py article-content --url 'https://mp.weixin.qq.com/s/xxx'
+
+# 基于已有数据生成分析报告，不触发爬取
+python main.py report --article-stats-file output/xxx/wechat_article_stats_xxx.json --fans-summary-file output/xxx/wechat_fans_summary_normalized.json
 ```
 
 ### 作为服务使用
